@@ -1,4 +1,4 @@
-INSERT INTO products (product_id, product_name, price) VALUES
+insert into products (product_id, product_name, price) values
   (1, 'Cheeseburger', 1100),
   (2, 'Hot dog', 799),
   (3, 'French Fries', 399),
@@ -9,7 +9,15 @@ INSERT INTO products (product_id, product_name, price) VALUES
 do $$
 begin
 	for i in 1..10000 loop
-		INSERT INTO orders (products, total)
-		SELECT ARRAY(SELECT trunc(random() * 6 + 1)::INTEGER FROM generate_series(1, trunc(random() * 5 + 1)::INTEGER)), 0;
+		insert into orders (products, total)
+		select array(select trunc(random() * 6 + 1)::integer from generate_series(1, trunc(random() * 5 + 1)::integer)), 0;
 	end loop;
-end; $$
+end; $$;
+
+update orders as o
+set total = (
+     select sum(p.price)
+     from products AS p
+     where p.product_id = any(o.products)
+)
+where order_id % 7 != 0
