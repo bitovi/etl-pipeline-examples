@@ -1,7 +1,7 @@
 
 services:
-  postgres:
-    container_name: etl_example-db
+  app-source-db:
+    container_name: etl-example_source-db
     image: postgres
     ports:
       - 5432:5432
