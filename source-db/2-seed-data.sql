@@ -1,4 +1,4 @@
-insert into products (product_id, product_name, price) values
+insert into product (product_id, product_name, price) values
   (1, 'Cheeseburger', 1100),
   (2, 'Hot dog', 799),
   (3, 'French Fries', 399),
@@ -9,15 +9,15 @@ insert into products (product_id, product_name, price) values
 do $$
 begin
 	for i in 1..10000 loop
-		insert into orders (products, total)
+		insert into "order" (products, total)
 		select array(select trunc(random() * 6 + 1)::integer from generate_series(1, trunc(random() * 5 + 1)::integer)), 0;
 	end loop;
 end; $$;
 
-update orders as o
+update "order" as o
 set total = (
      select sum(p.price)
-     from products AS p
+     from product AS p
      where p.product_id = any(o.products)
 )
 where order_id % 7 != 0

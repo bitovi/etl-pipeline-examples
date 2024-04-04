@@ -44,8 +44,14 @@
 #
 # Feel free to modify this file to suit your needs.
 ---
+x-common-service-settings:
+  &common-service-settings
+  networks:
+    - etlnetwork
+
 x-airflow-common:
   &airflow-common
+  <<: *common-service-settings
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
@@ -71,6 +77,9 @@ x-airflow-common:
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    # DB connection
+    AIRFLOW_CONN_SOURCE_DB: postgresql://dbuser:dbpassword@app-source-db:5432/postgres
+    AIRFLOW_CONN_DATA_WAREHOUSE_DB: postgresql://dbuser:dbpassword@data-warehouse-db:5432/postgres
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
@@ -86,6 +95,7 @@ x-airflow-common:
 
 services:
   postgres:
+    <<: *common-service-settings
     image: postgres:13
     environment:
       POSTGRES_USER: airflow
@@ -101,6 +111,7 @@ services:
     restart: always
 
   redis:
+    <<: *common-service-settings
     image: redis:latest
     expose:
       - 6379
@@ -239,8 +250,8 @@ services:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-foo}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-bar}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
     volumes:

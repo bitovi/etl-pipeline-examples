@@ -4,6 +4,7 @@ User airflow
 RUN pip install numpy \
   && pip install pandas \
   && pip install datetime \
-  && pip install airflow-code-editor 
+  && pip install airflow-code-editor \
+	&& pip install apache-airflow-providers-postgres
 
 USER airflow
