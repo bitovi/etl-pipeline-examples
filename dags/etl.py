@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 
 default_args = {
@@ -17,7 +18,39 @@ default_args = {
 )
 def aaa_etl_pipeline():
     @task()
-    def transform_data(orders, products):
+    def extract_data():
+        postgres_hook = PostgresHook(postgres_conn_id='source_db')
+
+        get_all_products = "SELECT product_id, product_name, price FROM product order by product_id asc;"
+        get_all_orders = "select order_id, products, total from \"order\" order by order_id asc;"
+
+        connection = postgres_hook.get_conn()
+        cursor = connection.cursor()
+
+        try:
+            cursor.execute("BEGIN;")
+
+            cursor.execute(get_all_products)
+            products = cursor.fetchall()
+
+            cursor.execute(get_all_orders)
+            orders = cursor.fetchall()
+
+            cursor.execute("COMMIT;")
+        except Exception as e:
+            cursor.execute("ROLLBACK;")
+            raise e
+        finally:
+            cursor.close()
+            connection.close()
+
+        return {'products': products, 'orders': orders}
+
+    @task()
+    def transform_data(data):
+        products = data['products']
+        orders = data['orders']
+
         denormalized_orders = []
 
         products_map = {}
@@ -49,29 +82,31 @@ def aaa_etl_pipeline():
         return denormalized_orders
 
     @task()
-    def generate_sql(data):
-        return '\n'.join(f"insert into orders values ({row['order_id']}, '{json.dumps(row)}');" for row in data)
+    def load_data(orders):
+        postgres_hook = PostgresHook(postgres_conn_id='data_warehouse_db')
 
-    get_all_products = PostgresOperator(
-        task_id="get_all_products",
-        postgres_conn_id="source_db",
-        sql="SELECT product_id, product_name, price FROM product order by product_id asc;",
-    )
+        connection = postgres_hook.get_conn()
+        cursor = connection.cursor()
 
-    get_all_orders = PostgresOperator(
-        task_id="get_all_orders",
-        postgres_conn_id="source_db",
-        sql="select order_id, products, total from \"order\" order by order_id asc;",
-    )
+        insert_statement = '\n'.join(f"insert into orders values ({order['order_id']}, '{json.dumps(order)}');" for order in orders)
 
-    transformed_data = transform_data(get_all_orders.output, get_all_products.output)
+        try:
+            cursor.execute("BEGIN;")
 
-    insert_statement = generate_sql(transformed_data)
+            cursor.execute(insert_statement)
 
-    PostgresOperator(
-        task_id="load_all_orders",
-        postgres_conn_id="data_warehouse_db",
-        sql=insert_statement,
-    )
+            cursor.execute("COMMIT;")
+        except Exception as e:
+            cursor.execute("ROLLBACK;")
+            raise e
+        finally:
+            cursor.close()
+            connection.close()
+
+        return True
+
+    data = extract_data()
+    transformed_data = transform_data(data)
+    load_data(transformed_data)
 
 dag_run = aaa_etl_pipeline()
