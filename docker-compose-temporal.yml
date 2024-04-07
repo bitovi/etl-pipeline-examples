@@ -1,0 +1,22 @@
+x-common-service-settings:
+  &common-service-settings
+  networks:
+    - etlnetwork
+
+services:
+  temporal-dev-server:
+    <<: *common-service-settings
+    container_name: temporal-ai-pipeline_temporal
+    image: debian:buster
+    command: >
+      bash -c '\
+        apt update && \
+        apt install -y curl && \
+        curl -sSf https://temporal.download/cli.sh | sh && \
+        PATH="\$PATH:/root/.temporalio/bin" >> ~/.bashrc && \
+        source ~/.bashrc && \
+        temporal server start-dev --namespace default --ip 0.0.0.0
+      '
+    ports:
+      - 7233:7233
+      - 8233:8233

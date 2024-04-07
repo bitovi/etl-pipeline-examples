@@ -1,10 +1,20 @@
 
 # ETL Pipeline Examples
 
-## Airflow Example
+## Starting application
 
-[Airflow Example](https://github.com/bitovi/etl-pipeline-examples/tree/airflow)
+```
+docker compose -f docker-compose.yml -f docker-compose-temporal.yml up --build -d
+```
 
-## Temporal Example
+## Restarting the worker (after a code change)
 
-[Temporal Example](https://github.com/bitovi/etl-pipeline-examples/tree/temporal)
+```
+docker compose -f docker-compose.yml -f docker-compose-temporal.yml restart temporal-worker
+```
+
+## Shutting down appliction
+
+```
+docker compose -f docker-compose.yml -f docker-compose-temporal.yml down -v --remove-orphans
+```

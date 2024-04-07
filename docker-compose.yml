@@ -1,0 +1,50 @@
+
+x-common-service-settings:
+  &common-service-settings
+  networks:
+    - etlnetwork
+
+networks:
+  etlnetwork:
+    name: etl_network
+
+services:
+  app-source-db:
+    <<: *common-service-settings
+    container_name: etl-example_app-source-db
+    image: postgres
+    ports:
+      - 5432:5432
+    environment:
+       - POSTGRES_PASSWORD=dbpassword
+       - POSTGRES_USER=dbuser
+       - POSTGRES_DB=postgres
+    volumes:
+      - ./source-db:/docker-entrypoint-initdb.d
+
+  data-warehouse-db:
+    <<: *common-service-settings
+    container_name: etl-example_data-warehouse-db
+    image: postgres
+    ports:
+      - 5433:5432
+    environment:
+       - POSTGRES_PASSWORD=dbpassword
+       - POSTGRES_USER=dbuser
+       - POSTGRES_DB=postgres
+    volumes:
+      - ./data-warehouse-db:/docker-entrypoint-initdb.d
+
+  temporal-worker:
+    <<: *common-service-settings
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - temporal-dev-server
+    restart: always
+    environment:
+      - SOURCE_DB_URL=postgresql://dbuser:dbpassword@app-source-db:5432/postgres
+      - DATA_WAREHOUSE_DB_URL=postgresql://dbuser:dbpassword@data-warehouse-db:5432/postgres
+    volumes:
+      - ./etl_workflow:/app/etl_workflow
