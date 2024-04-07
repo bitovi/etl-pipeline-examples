@@ -26,22 +26,11 @@ def aaa_etl_pipeline():
         connection = postgres_hook.get_conn()
         cursor = connection.cursor()
 
-        try:
-            cursor.execute("BEGIN;")
+        cursor.execute(get_all_products)
+        products = cursor.fetchall()
 
-            cursor.execute(get_all_products)
-            products = cursor.fetchall()
-
-            cursor.execute(get_all_orders)
-            orders = cursor.fetchall()
-
-            cursor.execute("COMMIT;")
-        except Exception as e:
-            cursor.execute("ROLLBACK;")
-            raise e
-        finally:
-            cursor.close()
-            connection.close()
+        cursor.execute(get_all_orders)
+        orders = cursor.fetchall()
 
         return {'products': products, 'orders': orders}
 
