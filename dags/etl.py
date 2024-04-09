@@ -55,14 +55,14 @@ def aaa_etl_pipeline():
             denormalized_order = {}
             denormalized_order["order_id"] = order[0]
             denormalized_order["products"] = []
-            denormalized_order["price"] = 0
+            denormalized_order["total"] = 0
 
             order_products = order[1]
             for product_id in order_products:
                 product_map = products_map[product_id]
                 denormalized_order["products"].append(product_map)
-                denormalized_order["price"] = (
-                    denormalized_order["price"] + product_map["price"]
+                denormalized_order["total"] = (
+                    denormalized_order["total"] + product_map["price"]
                 )
 
             denormalized_orders.append(denormalized_order)
