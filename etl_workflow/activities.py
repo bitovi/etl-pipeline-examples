@@ -10,7 +10,7 @@ DATA_WAREHOUSE_DB_URL = os.environ.get('DATA_WAREHOUSE_DB_URL')
 
 @activity.defn
 async def extract_data():
-    get_all_products = "SELECT product_id, product_name, price FROM product order by product_id asc;"
+    get_all_products = "select product_id, product_name, price from product order by product_id asc;"
     get_all_orders = "select order_id, products, total from \"order\" order by order_id asc;"
 
     url = urlparse(SOURCE_DB_URL)
