@@ -34,8 +34,12 @@ def aaa_etl_pipeline():
 
         return {'products': products, 'orders': orders}
 
-    @task()
+    @task(
+        retries=1,
+        retry_delay=timedelta(seconds=10),
+    )
     def transform_data(data):
+        raise Exception("Oh no!")
         products = data['products']
         orders = data['orders']
 
