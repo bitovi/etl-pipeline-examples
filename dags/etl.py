@@ -2,12 +2,15 @@ import json
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.utils.trigger_rule import TriggerRule
 
 default_args = {
     "owner": "me",
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
+
+list_of_items_to_execute_on=["one", "two", "three"]
 
 @dag(
     default_args=default_args,
@@ -16,7 +19,9 @@ default_args = {
     catchup=False,
 )
 def aaa_etl_pipeline():
-    @task()
+    @task(
+        do_xcom_push=True
+    )
     def extract_data():
         postgres_hook = PostgresHook(postgres_conn_id='source_db')
 
@@ -35,7 +40,8 @@ def aaa_etl_pipeline():
         return {'products': products, 'orders': orders}
 
     @task()
-    def transform_data(data):
+    def transform_data(**kwargs):
+        data = kwargs["task_instance"].xcom_pull(task_ids='extract_data')
         products = data['products']
         orders = data['orders']
 
@@ -67,10 +73,25 @@ def aaa_etl_pipeline():
 
             denormalized_orders.append(denormalized_order)
 
+        # return [] # Uncomment to trigger send_alert
         return denormalized_orders
+    
+    @task.branch()
+    def branch(task_instance):
+        try:
+            result = task_instance.xcom_pull(task_ids="transform_data")
+            if len(result) > 0:
+                return ['load_data', 'send_alert']
+            else:
+                return 'send_alert'
+        except Exception as error:
+            # Stop execution if any errors happen
+            return None
+
 
     @task()
-    def load_data(orders):
+    def load_data(**kwargs):
+        orders = kwargs["task_instance"].xcom_pull(task_ids='transform_data')
         postgres_hook = PostgresHook(postgres_conn_id='data_warehouse_db')
 
         connection = postgres_hook.get_conn()
@@ -92,9 +113,35 @@ def aaa_etl_pipeline():
             connection.close()
 
         return True
+    
+    @task()
+    def send_alert():
+        print("Send email here!")
 
-    data = extract_data()
-    transformed_data = transform_data(data)
-    load_data(transformed_data)
+    @task()
+    def foo(item):
+        print(f"Something else could happen here! {item}")
+
+    @task()
+    def bar(item):
+        print(f"Another thing could happen here! {item}")
+
+    @task(
+        trigger_rule=TriggerRule.ONE_FAILED
+    )
+    def notify_admin():
+        print("Let an admin know something went wrong here")
+
+    extract_data_task = extract_data()
+    transform_data_task = transform_data()
+    branch_task = branch()
+    load_data_task = load_data()
+    send_alert_task = send_alert()
+    foo_tasks = foo.expand(item=list_of_items_to_execute_on)
+    bar_tasks = [bar(i) for i in list_of_items_to_execute_on]
+
+    extract_data_task >> transform_data_task >> branch_task
+    branch_task >> [load_data_task, send_alert_task] >> foo_tasks
+    foo_tasks >> bar_tasks >> notify_admin()
 
 dag_run = aaa_etl_pipeline()
