@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -18,6 +19,7 @@ default_args = {
 def aaa_etl_pipeline():
     @task()
     def extract_data():
+        time.sleep(10)
         postgres_hook = PostgresHook(postgres_conn_id='source_db')
 
         get_all_products = "SELECT product_id, product_name, price FROM product order by product_id asc;"
@@ -33,9 +35,15 @@ def aaa_etl_pipeline():
         orders = cursor.fetchall()
 
         return {'products': products, 'orders': orders}
+    
+    @task
+    def foo_bar():
+        print("This is the foo bar function!")
 
     @task()
-    def transform_data(data):
+    def transform_data(**kwargs):
+        data = kwargs["task_instance"].xcom_pull(task_ids='extract_data')
+        time.sleep(10)
         products = data['products']
         orders = data['orders']
 
@@ -68,9 +76,15 @@ def aaa_etl_pipeline():
             denormalized_orders.append(denormalized_order)
 
         return denormalized_orders
+        # return { denormalized_orders: denormalized_orders }
 
     @task()
-    def load_data(orders):
+    def load_data(**kwargs):
+        orders = kwargs["task_instance"].xcom_pull(task_ids='transform_data')
+        # Switch to this to break compatibility with transform_data
+        # data = kwargs["task_instance"].xcom_pull(task_ids='transform_data')
+        # orders = data.denormalized_orders
+        time.sleep(10)
         postgres_hook = PostgresHook(postgres_conn_id='data_warehouse_db')
 
         connection = postgres_hook.get_conn()
@@ -92,9 +106,10 @@ def aaa_etl_pipeline():
             connection.close()
 
         return True
-
-    data = extract_data()
-    transformed_data = transform_data(data)
-    load_data(transformed_data)
+    # start with this and wait until load_data starts
+    extract_data() >> transform_data() >> load_data() 
+    # then switch to this
+    # extract_data() >> foo_bar() >> transform_data() >> load_data()
+    # switch back to see the task disappear from all executions in the UI
 
 dag_run = aaa_etl_pipeline()
