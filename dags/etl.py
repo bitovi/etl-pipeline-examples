@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.operators.postgres_operator import PostgresOperator
 
 default_args = {
     "owner": "me",
@@ -16,29 +17,18 @@ default_args = {
     catchup=False,
 )
 def aaa_etl_pipeline():
-    @task()
-    def extract_data():
-        postgres_hook = PostgresHook(postgres_conn_id='source_db')
-
-        get_all_products = "SELECT product_id, product_name, price FROM product order by product_id asc;"
-        get_all_orders = "select order_id, products, total from \"order\" order by order_id asc;"
-
-        connection = postgres_hook.get_conn()
-        cursor = connection.cursor()
-
-        cursor.execute(get_all_products)
-        products = cursor.fetchall()
-
-        cursor.execute(get_all_orders)
-        orders = cursor.fetchall()
-
-        return {'products': products, 'orders': orders}
+    extract_data = PostgresOperator(
+        task_id="extract_data",
+        postgres_conn_id="source_db",
+        sql=[
+            "SELECT product_id, product_name, price FROM product ORDER BY product_id ASC;",
+            "SELECT order_id, products, total FROM \"order\" ORDER BY order_id ASC;"
+        ]
+    )
 
     @task()
-    def transform_data(data):
-        products = data['products']
-        orders = data['orders']
-
+    def transform_data(**kwargs):
+        products, orders = kwargs["task_instance"].xcom_pull(task_ids='extract_data')
         denormalized_orders = []
 
         products_map = {}
@@ -70,7 +60,8 @@ def aaa_etl_pipeline():
         return denormalized_orders
 
     @task()
-    def load_data(orders):
+    def load_data(**kwargs):
+        orders = kwargs["task_instance"].xcom_pull(task_ids='transform_data')
         postgres_hook = PostgresHook(postgres_conn_id='data_warehouse_db')
 
         connection = postgres_hook.get_conn()
@@ -93,8 +84,6 @@ def aaa_etl_pipeline():
 
         return True
 
-    data = extract_data()
-    transformed_data = transform_data(data)
-    load_data(transformed_data)
+    extract_data >> transform_data() >> load_data()
 
 dag_run = aaa_etl_pipeline()
