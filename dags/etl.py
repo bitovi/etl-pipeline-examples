@@ -16,7 +16,7 @@ default_args = {
     start_date=datetime(2023, 1, 1),
     catchup=False,
 )
-def aaa_etl_pipeline():
+def etl_pipeline():
     extract_data = PostgresOperator(
         task_id="extract_data",
         postgres_conn_id="source_db",
@@ -86,4 +86,4 @@ def aaa_etl_pipeline():
 
     extract_data >> transform_data() >> load_data()
 
-dag_run = aaa_etl_pipeline()
+dag_run = etl_pipeline()
