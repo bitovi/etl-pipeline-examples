@@ -12,7 +12,7 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    schedule_interval="@daily",
+    schedule_interval=None,
     start_date=datetime(2023, 1, 1),
     catchup=False,
 )
