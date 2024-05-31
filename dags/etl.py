@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.postgres_operator import PostgresOperator
+from airflow.models import TaskInstance
 
 default_args = {
     "owner": "me",
@@ -17,73 +18,61 @@ default_args = {
     catchup=False,
 )
 def etl_pipeline():
-    extract_data = PostgresOperator(
-        task_id="extract_data",
-        postgres_conn_id="source_db",
-        sql=[
-            "SELECT product_id, product_name, price FROM product ORDER BY product_id ASC;",
-            "SELECT order_id, products, total FROM \"order\" ORDER BY order_id ASC;"
-        ]
+    @task()
+    def hold_funds(**kwargs):
+        print("Collecting funds")
+        # Implementation for getting funds
+        pass
+
+    @task()
+    def revert_hold_funds(**kwargs):
+        dag_instance = kwargs['dag']
+        execution_date = kwargs['execution_date']
+        operator_instance = dag_instance.get_task("hold_funds")
+        previous_task_state = TaskInstance(operator_instance, execution_date).current_state()
+        print(f"previous_task_state: {previous_task_state}")
+        if previous_task_state == 'success':
+            print("Returning funds")
+            # Implementation for returning funds
+
+    @task()
+    def hold_inventory(**kwargs):
+        print("Hold inventory")
+        # Implementation for holding inventory
+        pass
+
+    @task()
+    def revert_hold_inventory(**kwargs):
+        dag_instance = kwargs['dag']
+        execution_date = kwargs['execution_date']
+        operator_instance = dag_instance.get_task("hold_inventory")
+        previous_task_state = TaskInstance(operator_instance, execution_date).current_state()
+        if previous_task_state == 'success':
+            print("Reverting inventory")
+            # Implementation for returning inventory
+
+    @task(
+        retries=1,
+        retry_delay=timedelta(seconds=10),
     )
+    def create_order(**kwargs):
+        print("Creating order")
+        # Implementation for creating order record
+
+        # raise Exception("Oh no!") # Uncomment to see the rollback happen
+        pass
 
     @task()
-    def transform_data(**kwargs):
-        products, orders = kwargs["task_instance"].xcom_pull(task_ids='extract_data')
-        denormalized_orders = []
+    def revert_create_order(**kwargs):
+        dag_instance = kwargs['dag']
+        execution_date = kwargs['execution_date']
+        operator_instance = dag_instance.get_task("create_order")
+        previous_task_state = TaskInstance(operator_instance, execution_date).current_state()
+        if previous_task_state == 'success':
+            print("Reverting order")
+            # Implementation for reverting order record
 
-        products_map = {}
-        for product in products:
-            product_map = {}
-            product_id = product[0]
-            product_map["product_id"] = product_id
-            product_map["product_name"] = product[1]
-            product_map["price"] = product[2]
 
-            products_map[product_id] = product_map
-
-        for order in orders:
-            denormalized_order = {}
-            denormalized_order["order_id"] = order[0]
-            denormalized_order["products"] = []
-            denormalized_order["total"] = 0
-
-            order_products = order[1]
-            for product_id in order_products:
-                product_map = products_map[product_id]
-                denormalized_order["products"].append(product_map)
-                denormalized_order["total"] = (
-                    denormalized_order["total"] + product_map["price"]
-                )
-
-            denormalized_orders.append(denormalized_order)
-
-        return denormalized_orders
-
-    @task()
-    def load_data(**kwargs):
-        orders = kwargs["task_instance"].xcom_pull(task_ids='transform_data')
-        postgres_hook = PostgresHook(postgres_conn_id='data_warehouse_db')
-
-        connection = postgres_hook.get_conn()
-        cursor = connection.cursor()
-
-        insert_statement = '\n'.join(f"insert into orders values ({order['order_id']}, '{json.dumps(order)}');" for order in orders)
-
-        try:
-            cursor.execute("BEGIN;")
-
-            cursor.execute(insert_statement)
-
-            cursor.execute("COMMIT;")
-        except Exception as e:
-            cursor.execute("ROLLBACK;")
-            raise e
-        finally:
-            cursor.close()
-            connection.close()
-
-        return True
-
-    extract_data >> transform_data() >> load_data()
+    hold_funds() >> hold_inventory() >> create_order() >> [revert_hold_funds().as_teardown(), revert_hold_inventory().as_teardown(), revert_create_order().as_teardown()]
 
 dag_run = etl_pipeline()
